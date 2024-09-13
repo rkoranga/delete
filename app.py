@@ -1,55 +1,55 @@
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, request, jsonify
 import cv2
+import numpy as np
+import os
+
+# Load the face recognizer and face cascade
 recognizer = cv2.face.LBPHFaceRecognizer_create()
 recognizer.read('trainer.yml')
 cascadePath = "Cascades/haarcascade_frontalface_default.xml"
-faceCascade = cv2.CascadeClassifier(cascadePath);
-font = cv2.FONT_HERSHEY_SIMPLEX
-id = 0
-names = ['None','Dharmaraj','Vikram'] # 
-app=Flask(__name__)
+faceCascade = cv2.CascadeClassifier(cascadePath)
 
-def capture_by_frames(): 
-    global cam
-    cam = cv2.VideoCapture(0)
-    while True:
-        ret, img =cam.read()
-        img = cv2.flip(img, 1) # 1 Stright 0 Reverse
-        gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-        detector=cv2.CascadeClassifier(cascadePath)
-        faces=detector.detectMultiScale(img,1.2,6)
-        for(x,y,w,h) in faces:
-            cv2.rectangle(img, (x,y), (x+w,y+h), (0,255,0), 2)
-            id, confidence = recognizer.predict(gray[y:y+h,x:x+w])           
-            if (confidence < 100):
-                id = names[id]
-                confidence = "  {0}%".format(round(100 - confidence))
-            else:
-                id = "Unknown"
-                confidence = "  {0}%".format(round(100 - confidence))
-            cv2.putText(img,str(id),(x+5,y-5),font,1,(255,255,255),2)
-            #cv2.putText(img,str(confidence),(x+5,y+h),font,1,(255,255,0),1)
-        ret1, buffer = cv2.imencode('.jpg', img)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+# Names associated with face IDs
+names = ['None', 'Dharmaraj', 'Vikram']
+
+app = Flask(__name__)
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/start',methods=['POST'])
-def start():
-    return render_template('index.html')
+# Route to process the frame sent from the client
+@app.route('/process_frame', methods=['POST'])
+def process_frame():
+    # Receive the frame from the client
+    file = request.files['frame']
+    img_bytes = file.read()
 
-@app.route('/stop',methods=['POST'])
-def stop():
-    if cam.isOpened():
-        cam.release()
-    return render_template('stop.html')
+    # Convert the image bytes to a numpy array for OpenCV processing
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-@app.route('/video_capture')
-def video_capture():
-    return Response(capture_by_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-if __name__=='__main__':
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = faceCascade.detectMultiScale(gray, 1.2, 6)
+
+    face_info = []
+    for (x, y, w, h) in faces:
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        id, confidence = recognizer.predict(gray[y:y + h, x:x + w])
+        
+        if confidence < 100:
+            name = names[id]
+            confidence_text = f"{round(100 - confidence)}%"
+        else:
+            name = "Unknown"
+            confidence_text = f"{round(100 - confidence)}%"
+
+        face_info.append({
+            'name': name,
+            'confidence': confidence_text
+        })
+
+    return jsonify(face_info)
+
+if __name__ == '__main__':
     app.run()
