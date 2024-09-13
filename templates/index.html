@@ -12,12 +12,15 @@
     </style>
 </head>
 <body>
-    <h1>Face Recognhhhhhhition</h1>
+    <h1>Face Recognition</h1>
     <video id="videoElement" autoplay playsinline></video>
     <button id="captureButton">Capture Frame</button>
+    <p id="output"></p>
+    
     <script>
         const videoElement = document.getElementById('videoElement');
         const captureButton = document.getElementById('captureButton');
+        const output = document.getElementById('output');
 
         // Access the user's camera
         navigator.mediaDevices.getUserMedia({ video: true })
@@ -35,6 +38,7 @@
             canvas.height = videoElement.videoHeight;
             const context = canvas.getContext('2d');
             context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
             canvas.toBlob(blob => {
                 const formData = new FormData();
                 formData.append('frame', blob, 'frame.jpg');
@@ -45,10 +49,19 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    console.log(data); // Log the recognition result
+                    if (data.message) {
+                        output.innerText = data.message;
+                    } else {
+                        let result = '';
+                        data.forEach(face => {
+                            result += `Name: ${face.name}, Confidence: ${face.confidence}\n`;
+                        });
+                        output.innerText = result;
+                    }
                 })
                 .catch(error => {
                     console.error('Error sending frame:', error);
+                    output.innerText = 'Error processing frame';
                 });
             });
         });
