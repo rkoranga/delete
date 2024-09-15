@@ -3,67 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Recognition</title>
+    <title>Live Face Detection</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
-        video {
-            width: 60%;
-            height: auto;
+        video, img {
+            width: 100%;
+            max-width: 640px;
+            border: 2px solid black;
+        }
+        h2 {
+            font-weight: 600;
+            font-size: 2em;
         }
     </style>
 </head>
 <body>
-    <h1>Face Recognition</h1>
-    <video id="videoElement" autoplay playsinline></video>
-    <button id="captureButton">Capture Frame</button>
-    <p id="output"></p>
-    
+    <div class="container text-center">
+        <h2>Live Face Detection</h2>
+        <video id="video" autoplay></video>
+        <br><br>
+        <button id="startDetection" class="btn btn-success">Start Detection</button>
+        <br><br>
+        <img id="output" alt="Processed Video Stream" />
+    </div>
+
     <script>
-        const videoElement = document.getElementById('videoElement');
-        const captureButton = document.getElementById('captureButton');
+        const video = document.getElementById('video');
         const output = document.getElementById('output');
 
-        // Access the user's camera
+        // Access the camera using getUserMedia
         navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
-                videoElement.srcObject = stream;
+                video.srcObject = stream;
             })
-            .catch(error => {
-                console.error('Error accessing the camera: ', error);
+            .catch(err => {
+                console.error("Error accessing camera: ", err);
             });
 
-        // Capture a frame and send it to the server
-        captureButton.addEventListener('click', () => {
+        // Capture frames and send them to the server for face detection
+        document.getElementById('startDetection').addEventListener('click', () => {
             const canvas = document.createElement('canvas');
-            canvas.width = videoElement.videoWidth;
-            canvas.height = videoElement.videoHeight;
             const context = canvas.getContext('2d');
-            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-            canvas.toBlob(blob => {
-                const formData = new FormData();
-                formData.append('frame', blob, 'frame.jpg');
-
-                fetch('/process_frame', {
+            function sendFrame() {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = canvas.toDataURL('image/jpeg');
+                
+                fetch('/detect', {
                     method: 'POST',
-                    body: formData
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.message) {
-                        output.innerText = data.message;
-                    } else {
-                        let result = '';
-                        data.forEach(face => {
-                            result += `Name: ${face.name}, Confidence: ${face.confidence}\n`;
-                        });
-                        output.innerText = result;
+                    if (data.success) {
+                        output.src = 'data:image/jpeg;base64,' + data.image;
                     }
-                })
-                .catch(error => {
-                    console.error('Error sending frame:', error);
-                    output.innerText = 'Error processing frame';
+                    // Continue sending frames
+                    requestAnimationFrame(sendFrame);
                 });
-            });
+            }
+            
+            sendFrame();
         });
     </script>
 </body>
